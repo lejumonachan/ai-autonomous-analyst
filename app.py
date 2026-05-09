@@ -150,104 +150,23 @@ uploaded_file = st.sidebar.file_uploader(
     type=["csv"],
     label_visibility="collapsed"
 )
-st.sidebar.markdown("""
-<div style="
-    margin-top: 25px;
-    padding: 18px;
-    border-radius: 18px;
-    background: linear-gradient(135deg, #0f172a, #1e3a8a);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.25);
-    border: 1px solid rgba(255,255,255,0.1);
-">
+st.sidebar.markdown("---")
 
-    <h2 style="
-        color: white;
-        margin-bottom: 5px;
-        font-size: 22px;
-    ">
-        👨‍💻 Developer
-    </h2>
+st.sidebar.markdown("## 👨‍💻 Developer")
 
-    <h3 style="
-        color: #93c5fd;
-        margin-top: 0;
-        margin-bottom: 12px;
-        font-size: 18px;
-    ">
-        Leju Monachan
-    </h3>
+st.sidebar.markdown("### Leju Monachan")
 
-    <p style="
-        color: #cbd5e1;
-        font-size: 13px;
-        line-height: 1.5;
-        margin-bottom: 18px;
-    ">
-        AI / Data Analyst building enterprise AI analytics, AutoML systems, interactive dashboards, and predictive applications.
-    </p>
+st.sidebar.markdown(
+    "[🔗 LinkedIn](https://www.linkedin.com/in/leju-monachan757/)"
+)
 
-    <a href="https://www.linkedin.com/in/leju-monachan757/"
-       target="_blank"
-       style="
-            display:block;
-            text-decoration:none;
-            background:#2563eb;
-            color:white;
-            padding:10px;
-            border-radius:10px;
-            margin-bottom:10px;
-            text-align:center;
-            font-weight:600;
-       ">
-       🔗 LinkedIn
-    </a>
+st.sidebar.markdown(
+    "[💻 GitHub](https://github.com/lejumonachan)"
+)
 
-    <a href="https://github.com/lejumonachan"
-       target="_blank"
-       style="
-            display:block;
-            text-decoration:none;
-            background:#111827;
-            color:white;
-            padding:10px;
-            border-radius:10px;
-            margin-bottom:10px;
-            text-align:center;
-            font-weight:600;
-            border:1px solid #334155;
-       ">
-       💻 GitHub
-    </a>
-
-    <a href="https://ai-autonomous-analyst-rbxj8yagslvp4ojp9mbagn.streamlit.app/"
-       target="_blank"
-       style="
-            display:block;
-            text-decoration:none;
-            background:linear-gradient(135deg, #10b981, #06b6d4);
-            color:white;
-            padding:10px;
-            border-radius:10px;
-            text-align:center;
-            font-weight:600;
-       ">
-       🌐 Live Demo
-    </a>
-
-</div>
-""", unsafe_allow_html=True)
-
-# =========================
-# HEADER
-# =========================
-st.markdown("""
-<div class="hero-card">
-    <div class="hero-title">AI Data Intelligence Platform</div>
-    <div class="hero-subtitle">
-        Upload data, clean it, visualize patterns, train models, and generate AI-powered insights.
-    </div>
-</div>
-""", unsafe_allow_html=True)
+st.sidebar.markdown(
+    "[🌐 Live Demo](https://ai-autonomous-analyst-rbxj8yagslvp4ojp9mbagn.streamlit.app/)"
+)
 
 # =========================
 # MAIN APP
