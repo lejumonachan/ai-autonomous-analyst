@@ -1,20 +1,6 @@
 # 🚀 AI Data Intelligence Platform
 
-🌐 Live Demo: https://your-app.streamlit.app
-
-## Dashboard Preview
-
-![Dashboard](images/Screenshot 2026-05-09 110123.png)
-
-## Modeling Section
-
-![Modeling](images/modeling.png)
-
-## AI Insights
-
-![Insights](images/insights.png)
-
-
+🌐 Live Demo: https://ai-autonomous-analyst-rbxj8yagslvp4ojp9mbagn.streamlit.app/
 
 An enterprise-style AI-powered data analytics platform built using **Streamlit**, **Scikit-learn**, **Plotly**, and **OpenAI**.
 
