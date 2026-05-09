@@ -150,6 +150,23 @@ uploaded_file = st.sidebar.file_uploader(
     type=["csv"],
     label_visibility="collapsed"
 )
+st.sidebar.markdown("---")
+
+st.sidebar.markdown("## 👨‍💻 Developer")
+
+st.sidebar.markdown("### Leju Monachan")
+
+st.sidebar.markdown(
+    "[🔗 LinkedIn](https://www.linkedin.com/in/leju-monachan757/)"
+)
+
+st.sidebar.markdown(
+    "[💻 GitHub](https://github.com/lejumonachan)"
+)
+
+st.sidebar.markdown(
+    "[🌐 Live Demo](https://ai-autonomous-analyst-rbxj8yagslvp4ojp9mbagn.streamlit.app/)"
+)
 
 # =========================
 # HEADER
