@@ -6,6 +6,34 @@ from utils.preprocessing import clean_data, handle_missing
 from utils.model_selector import run_ml_pipeline, predict_user_input
 from utils.llm_engine import ask_llm
 
+
+# =========================
+# SAFE FILE READER
+# =========================
+def read_uploaded_dataset(uploaded_file):
+    file_name = uploaded_file.name.lower()
+
+    if file_name.endswith(".csv"):
+        try:
+            uploaded_file.seek(0)
+            return pd.read_csv(uploaded_file, encoding="utf-8")
+
+        except UnicodeDecodeError:
+            uploaded_file.seek(0)
+            return pd.read_csv(uploaded_file, encoding="windows-1252")
+
+        except Exception:
+            uploaded_file.seek(0)
+            return pd.read_csv(uploaded_file, encoding="latin1")
+
+    elif file_name.endswith(".xlsx") or file_name.endswith(".xls"):
+        uploaded_file.seek(0)
+        return pd.read_excel(uploaded_file)
+
+    else:
+        raise ValueError("Unsupported file format. Please upload CSV or Excel file.")
+
+
 # =========================
 # PAGE CONFIG
 # =========================
@@ -14,6 +42,7 @@ st.set_page_config(
     page_icon="🚀",
     layout="wide"
 )
+
 
 # =========================
 # CUSTOM CSS
@@ -24,7 +53,6 @@ st.markdown("""
     background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
 }
 
-/* Sidebar */
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #111827 0%, #1e3a8a 100%);
 }
@@ -33,7 +61,6 @@ section[data-testid="stSidebar"] * {
     color: white !important;
 }
 
-/* File uploader card */
 section[data-testid="stSidebar"] div[data-testid="stFileUploader"] {
     background: linear-gradient(135deg, #ffffff 0%, #dbeafe 100%);
     padding: 18px;
@@ -42,7 +69,6 @@ section[data-testid="stSidebar"] div[data-testid="stFileUploader"] {
     box-shadow: 0px 8px 25px rgba(37, 99, 235, 0.25);
 }
 
-/* Upload button */
 section[data-testid="stSidebar"] div[data-testid="stFileUploader"] button {
     background: linear-gradient(135deg, #2563eb, #06b6d4) !important;
     color: white !important;
@@ -51,18 +77,15 @@ section[data-testid="stSidebar"] div[data-testid="stFileUploader"] button {
     font-weight: 700 !important;
 }
 
-/* Uploaded file text */
 section[data-testid="stSidebar"] div[data-testid="stFileUploader"] span {
     color: #0f172a !important;
 }
 
-/* Main spacing */
 .block-container {
     padding-top: 2rem;
     padding-bottom: 2rem;
 }
 
-/* Hero card */
 .hero-card {
     background: linear-gradient(135deg, #2563eb, #7c3aed);
     padding: 35px;
@@ -83,7 +106,6 @@ section[data-testid="stSidebar"] div[data-testid="stFileUploader"] span {
     opacity: 0.95;
 }
 
-/* Metric cards */
 .metric-card {
     background: white;
     padding: 25px;
@@ -104,7 +126,6 @@ section[data-testid="stSidebar"] div[data-testid="stFileUploader"] span {
     color: #0f172a;
 }
 
-/* Buttons */
 .stButton > button {
     background: linear-gradient(135deg, #2563eb, #7c3aed);
     color: white;
@@ -133,10 +154,11 @@ footer {
 </style>
 """, unsafe_allow_html=True)
 
+
 # =========================
 # SIDEBAR
 # =========================
-st.sidebar.markdown("##  AI Data Platform")
+st.sidebar.markdown("## 🚀 AI Data Platform")
 st.sidebar.markdown("Enterprise AutoML & Analytics")
 
 menu = st.sidebar.radio(
@@ -145,42 +167,52 @@ menu = st.sidebar.radio(
 )
 
 st.sidebar.markdown("### 📂 Upload Dataset")
+
 uploaded_file = st.sidebar.file_uploader(
-    "Upload CSV",
-    type=["csv"],
+    "Upload CSV or Excel",
+    type=["csv", "xlsx", "xls"],
     label_visibility="collapsed"
 )
+
 st.sidebar.markdown("---")
-
 st.sidebar.markdown("## 👨‍💻 Developer")
-
 st.sidebar.markdown("### Leju Monachan")
+st.sidebar.markdown("[🔗 LinkedIn](https://linkedin.com/in/YOUR_LINKEDIN)")
+st.sidebar.markdown("[💻 GitHub](https://github.com/YOUR_GITHUB)")
+st.sidebar.markdown("[🌐 Live Demo](https://your-streamlit-app.streamlit.app)")
 
-st.sidebar.markdown(
-    "[🔗 LinkedIn](https://www.linkedin.com/in/leju-monachan757/)"
-)
 
-st.sidebar.markdown(
-    "[💻 GitHub](https://github.com/lejumonachan)"
-)
+# =========================
+# HEADER
+# =========================
+st.markdown("""
+<div class="hero-card">
+    <div class="hero-title">AI Data Intelligence Platform</div>
+    <div class="hero-subtitle">
+        Upload data, clean it, visualize patterns, train models, and generate AI-powered insights.
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-st.sidebar.markdown(
-    "[🌐 Live Demo](https://ai-autonomous-analyst-rbxj8yagslvp4ojp9mbagn.streamlit.app/)"
-)
 
 # =========================
 # MAIN APP
 # =========================
 if uploaded_file:
 
-    df = pd.read_csv(uploaded_file)
+    try:
+        df = read_uploaded_dataset(uploaded_file)
+
+    except Exception as e:
+        st.error(f"❌ Error while reading uploaded file: {e}")
+        st.stop()
 
     # =========================
     # DASHBOARD
     # =========================
     if menu == "Dashboard":
 
-        st.markdown("##  Executive Dashboard")
+        st.markdown("## 📊 Executive Dashboard")
 
         c1, c2, c3 = st.columns(3)
 
@@ -217,7 +249,7 @@ if uploaded_file:
         if len(numeric_cols) == 0:
             st.warning("No numeric columns found for visualization.")
         else:
-            st.markdown("###  Interactive Visual Analytics")
+            st.markdown("### 📈 Interactive Visual Analytics")
 
             chart_tabs = st.tabs([
                 "Bar Chart",
@@ -286,12 +318,15 @@ if uploaded_file:
     # =========================
     elif menu == "Cleaning":
 
-        st.markdown("##  Data Cleaning Studio")
+        st.markdown("## 🧹 Data Cleaning Studio")
 
         st.markdown("### Missing Values Before Cleaning")
         st.dataframe(df.isnull().sum(), use_container_width=True)
 
-        strategy = st.selectbox("Numeric Missing Value Strategy", ["mean", "median"])
+        strategy = st.selectbox(
+            "Numeric Missing Value Strategy",
+            ["mean", "median"]
+        )
 
         if st.button("Auto Clean Data"):
             df = clean_data(df)
@@ -306,6 +341,7 @@ if uploaded_file:
         st.dataframe(df.head(10), use_container_width=True)
 
         csv = df.to_csv(index=False).encode("utf-8")
+
         st.download_button(
             "Download Cleaned Dataset",
             csv,
@@ -318,7 +354,7 @@ if uploaded_file:
     # =========================
     elif menu == "Modeling":
 
-        st.markdown("##  AutoML Modeling Engine")
+        st.markdown("## 🤖 AutoML Modeling Engine")
 
         target = st.selectbox("Target Column", df.columns)
 
@@ -365,15 +401,17 @@ if uploaded_file:
             st.success(output["best_model_name"])
 
             st.markdown("### 🔮 Sample Predictions")
+
             prediction_df = pd.DataFrame({
                 "Actual": output["actual"],
                 "Predicted": output["predictions"]
             })
+
             st.dataframe(prediction_df, use_container_width=True)
 
             st.divider()
 
-            st.markdown("##  Live Prediction Console")
+            st.markdown("## 🚀 Live Prediction Console")
 
             user_input = {}
             X_sample = output["X_sample"]
@@ -382,6 +420,7 @@ if uploaded_file:
             for col in feature_columns:
 
                 if pd.api.types.is_numeric_dtype(X_sample[col]):
+
                     min_val = float(X_sample[col].min())
                     max_val = float(X_sample[col].max())
                     mean_val = float(X_sample[col].mean())
@@ -395,6 +434,7 @@ if uploaded_file:
 
                 else:
                     options = X_sample[col].dropna().astype(str).unique().tolist()
+
                     if len(options) == 0:
                         options = ["Unknown"]
 
@@ -420,33 +460,44 @@ if uploaded_file:
     # =========================
     elif menu == "AI Insights":
 
-        st.markdown("##  AI Analyst")
+        st.markdown("## 🧠 AI Analyst")
 
         st.write("Generate executive-level AI insights from your dataset.")
 
         if st.button("Generate Insights"):
 
             summary = f"""
-            Dataset shape: {df.shape}
-            Columns: {list(df.columns)}
-            Missing:
-            {df.isnull().sum().to_string()}
-            """
+Dataset shape: {df.shape}
+
+Columns:
+{list(df.columns)}
+
+Missing values:
+{df.isnull().sum().to_string()}
+
+Data preview:
+{df.head(20).to_string()}
+
+Statistical summary:
+{df.describe(include='all').to_string()}
+"""
 
             try:
                 result = ask_llm(summary)
                 st.markdown(result)
+
             except Exception as e:
                 st.error(f"LLM Error: {e}")
 
 else:
+
     st.markdown("""
     <div class="hero-card">
         <div class="hero-title">Welcome to AI Data Platform</div>
         <div class="hero-subtitle">
-            Upload a CSV file from the sidebar to begin your analysis.
+            Upload a CSV or Excel file from the sidebar to begin your analysis.
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.info("Upload a CSV file to start.")
+    st.info("Upload a CSV or Excel file to start.")
