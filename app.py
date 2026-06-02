@@ -52,7 +52,7 @@ ensure_directories()
 
 st.set_page_config(
     page_title="Helios AI | Space Biolab Intelligence",
-    page_icon="🧬",
+    page_icon="",
     layout="wide"
 )
 
@@ -498,7 +498,7 @@ elif page == "Experiment Upload":
             c3.metric("Missing Values", summary["missing_values"])
             c4.metric("Duplicate Rows", summary["duplicate_rows"])
 
-            st.markdown("### 📊 Experiment Dataset Preview")
+            st.markdown("###  Experiment Dataset Preview")
             st.dataframe(data.head(25), use_container_width=True)
 
             c1, c2 = st.columns(2)
@@ -535,7 +535,7 @@ elif page == "Experiment Upload":
                 except Exception as e:
                     st.error(f"RAG Index Error: {e}")
 
-            st.markdown("### 📄 Scientific Document Preview")
+            st.markdown("###  Scientific Document Preview")
             st.text_area("Extracted PDF Text", data[:6000], height=350)
 
             st.metric("Extracted Characters", len(data))
@@ -1104,7 +1104,7 @@ Statistical Summary:
 
             with open(report_path, "rb") as file:
                 st.download_button(
-                    label="📥 Download Mission Report",
+                    label=" Download Mission Report",
                     data=file,
                     file_name="helios_mission_report.pdf",
                     mime="application/pdf"
