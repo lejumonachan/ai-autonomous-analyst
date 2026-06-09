@@ -2,860 +2,416 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-from utils.file_loader import load_file, get_dataframe_summary
-from utils.helpers import ensure_directories
-
-from utils.monitoring import (
-    get_monitoring_columns,
-    create_time_series_chart,
-    create_scatter_chart,
-    create_distribution_chart,
-    create_correlation_heatmap,
-    calculate_health_score,
-    create_health_gauge
-)
-
-from utils.rag_engine import (
-    chunk_text,
-    build_faiss_index,
-    rag_scientific_answer
-)
-
-from utils.ai_engine import (
-    scientific_answer,
-    generate_scientific_summary
-)
-
-from utils.anomaly_engine import (
-    detect_anomalies,
-    rule_based_alerts
-)
-
-from utils.risk_engine import calculate_mission_risk
-
-from utils.prediction_engine import (
-    train_prediction_model,
-    predict_single_input
-)
-
-from utils.recommendation_engine import generate_experiment_recommendations
-
-from utils.knowledge_graph import (
-    build_knowledge_graph,
-    get_graph_edges
-)
-
-from utils.report_generator import generate_mission_report
+from utils.preprocessing import clean_data, handle_missing
+from utils.model_selector import run_ml_pipeline, predict_user_input
+from utils.llm_engine import ask_llm
 
 
-ensure_directories()
+# =========================
+# SAFE FILE READER
+# =========================
+def read_uploaded_dataset(uploaded_file):
+    file_name = uploaded_file.name.lower()
 
+    if file_name.endswith(".csv"):
+        try:
+            uploaded_file.seek(0)
+            return pd.read_csv(uploaded_file, encoding="utf-8")
+
+        except UnicodeDecodeError:
+            uploaded_file.seek(0)
+            return pd.read_csv(uploaded_file, encoding="windows-1252")
+
+        except Exception:
+            uploaded_file.seek(0)
+            return pd.read_csv(uploaded_file, encoding="latin1")
+
+    elif file_name.endswith(".xlsx") or file_name.endswith(".xls"):
+        uploaded_file.seek(0)
+        return pd.read_excel(uploaded_file)
+
+    else:
+        raise ValueError("Unsupported file format. Please upload CSV or Excel file.")
+
+
+# =========================
+# PAGE CONFIG
+# =========================
 st.set_page_config(
-    page_title="Helios AI | Space Biolab Intelligence",
-    page_icon="",
+    page_title="AI Data Platform",
+    page_icon="🚀",
     layout="wide"
 )
 
-# ======================
-# PREMIUM CSS
-# ======================
 
+# =========================
+# CUSTOM CSS
+# =========================
 st.markdown("""
 <style>
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
-
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-}
-
 .stApp {
-    background:
-        radial-gradient(circle at 10% 10%, rgba(34,211,238,0.18), transparent 28%),
-        radial-gradient(circle at 90% 5%, rgba(168,85,247,0.22), transparent 30%),
-        radial-gradient(circle at 50% 90%, rgba(20,184,166,0.12), transparent 35%),
-        linear-gradient(135deg, #020617 0%, #050816 45%, #0f172a 100%);
-    color: #e5e7eb;
-}
-
-.block-container {
-    padding-top: 1.5rem;
-    padding-left: 4rem;
-    padding-right: 4rem;
-    max-width: 1400px;
+    background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
 }
 
 section[data-testid="stSidebar"] {
-    background: rgba(2, 6, 23, 0.96);
-    border-right: 1px solid rgba(34,211,238,0.16);
-    box-shadow: 10px 0 40px rgba(0,0,0,0.42);
+    background: linear-gradient(180deg, #111827 0%, #1e3a8a 100%);
 }
 
 section[data-testid="stSidebar"] * {
-    color: #f8fafc !important;
+    color: white !important;
 }
 
-.sidebar-brand {
-    background: linear-gradient(135deg, rgba(34,211,238,0.14), rgba(124,58,237,0.18));
-    border: 1px solid rgba(34,211,238,0.25);
-    padding: 22px;
+section[data-testid="stSidebar"] div[data-testid="stFileUploader"] {
+    background: linear-gradient(135deg, #ffffff 0%, #dbeafe 100%);
+    padding: 18px;
+    border-radius: 18px;
+    border: 2px dashed #60a5fa;
+    box-shadow: 0px 8px 25px rgba(37, 99, 235, 0.25);
+}
+
+section[data-testid="stSidebar"] div[data-testid="stFileUploader"] button {
+    background: linear-gradient(135deg, #2563eb, #06b6d4) !important;
+    color: white !important;
+    border-radius: 12px !important;
+    border: none !important;
+    font-weight: 700 !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stFileUploader"] span {
+    color: #0f172a !important;
+}
+
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+
+.hero-card {
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    padding: 35px;
     border-radius: 24px;
-    margin-bottom: 22px;
-    box-shadow: 0 18px 45px rgba(34,211,238,0.10);
-}
-
-.sidebar-brand .logo {
-    font-size: 34px;
-    margin-bottom: 8px;
-}
-
-.sidebar-brand h2 {
-    margin: 0;
-    font-size: 25px;
-    font-weight: 900;
-}
-
-.sidebar-brand p {
-    margin-top: 8px;
-    color: #a5f3fc !important;
-    font-size: 13px;
-    line-height: 1.45;
-}
-
-section[data-testid="stSidebar"] label {
-    background: rgba(255,255,255,0.045);
-    padding: 13px 15px;
-    border-radius: 16px;
-    border: 1px solid rgba(255,255,255,0.08);
-    margin-bottom: 8px;
-}
-
-section[data-testid="stSidebar"] label:hover {
-    background: rgba(34,211,238,0.16);
-    border: 1px solid rgba(34,211,238,0.32);
-}
-
-.topbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 22px 26px;
-    border-radius: 24px;
-    background: rgba(15,23,42,0.58);
-    border: 1px solid rgba(148,163,184,0.18);
-    backdrop-filter: blur(18px);
-    box-shadow: 0 18px 55px rgba(2,6,23,0.35);
-    margin-bottom: 26px;
-}
-
-.topbar-title {
-    font-size: 22px;
-    font-weight: 900;
     color: white;
-}
-
-.topbar-subtitle {
-    color: #94a3b8;
-    font-size: 13px;
-    margin-top: 3px;
-}
-
-.status-pill {
-    display: inline-block;
-    padding: 9px 14px;
-    border-radius: 999px;
-    background: rgba(16,185,129,0.12);
-    color: #86efac;
-    border: 1px solid rgba(16,185,129,0.32);
-    font-size: 13px;
-    font-weight: 800;
-}
-
-.hero {
-    position: relative;
-    overflow: hidden;
-    min-height: 360px;
-    background:
-        radial-gradient(circle at 85% 22%, rgba(34,211,238,0.35), transparent 24%),
-        radial-gradient(circle at 18% 80%, rgba(168,85,247,0.28), transparent 26%),
-        linear-gradient(135deg, rgba(2,6,23,0.98) 0%, rgba(15,23,42,0.92) 40%, rgba(30,64,175,0.72) 100%);
-    padding: 54px;
-    border-radius: 36px;
-    color: white;
-    box-shadow: 0 35px 90px rgba(34,211,238,0.18);
-    border: 1px solid rgba(255,255,255,0.16);
-    margin-bottom: 32px;
-}
-
-.hero-badge {
-    display: inline-block;
-    background: rgba(34,211,238,0.12);
-    border: 1px solid rgba(34,211,238,0.28);
-    padding: 9px 15px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 900;
-    margin-bottom: 18px;
-    color: #a5f3fc;
-    letter-spacing: 0.5px;
+    box-shadow: 0px 20px 40px rgba(37, 99, 235, 0.25);
+    margin-bottom: 25px;
 }
 
 .hero-title {
-    font-size: 58px;
-    font-weight: 950;
-    letter-spacing: -2px;
-    line-height: 1.05;
-    max-width: 1000px;
-}
-
-.hero-gradient {
-    background: linear-gradient(90deg, #67e8f9, #c4b5fd);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    font-size: 42px;
+    font-weight: 800;
+    margin-bottom: 8px;
 }
 
 .hero-subtitle {
     font-size: 18px;
-    opacity: 0.92;
-    margin-top: 20px;
-    max-width: 980px;
-    line-height: 1.75;
-    color: #cbd5e1;
-}
-
-.section-title {
-    font-size: 30px;
-    font-weight: 950;
-    color: #f8fafc;
-    margin-bottom: 14px;
-}
-
-.glass-card {
-    background: rgba(15,23,42,0.72);
-    backdrop-filter: blur(18px);
-    padding: 30px;
-    border-radius: 28px;
-    border: 1px solid rgba(148,163,184,0.22);
-    box-shadow: 0 18px 55px rgba(2,6,23,0.42);
-    margin-bottom: 24px;
+    opacity: 0.95;
 }
 
 .metric-card {
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(180deg, rgba(30,41,59,0.95), rgba(15,23,42,0.98));
-    padding: 26px;
-    border-radius: 26px;
-    border: 1px solid rgba(34,211,238,0.18);
-    box-shadow: 0 16px 42px rgba(2,6,23,0.42);
-    min-height: 150px;
-}
-
-.metric-card::before {
-    content: "";
-    position: absolute;
-    height: 3px;
-    left: 0;
-    top: 0;
-    width: 100%;
-    background: linear-gradient(90deg, #06b6d4, #7c3aed);
+    background: white;
+    padding: 25px;
+    border-radius: 20px;
+    box-shadow: 0px 8px 24px rgba(15, 23, 42, 0.08);
+    border: 1px solid #e5e7eb;
 }
 
 .metric-label {
-    color: #94a3b8;
-    font-size: 13px;
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    font-size: 14px;
+    color: #64748b;
+    font-weight: 600;
 }
 
 .metric-value {
-    color: #f8fafc;
-    font-size: 30px;
-    font-weight: 950;
-    margin-top: 12px;
-}
-
-.metric-note {
-    color: #67e8f9;
-    font-size: 12px;
-    margin-top: 10px;
-    line-height: 1.4;
-}
-
-.feature-card {
-    background: rgba(255,255,255,0.045);
-    border: 1px solid rgba(148,163,184,0.18);
-    border-radius: 26px;
-    padding: 24px;
-    min-height: 190px;
-}
-
-.feature-icon {
-    font-size: 30px;
-    margin-bottom: 14px;
-}
-
-.feature-card h4 {
-    color: #e0f2fe;
-    margin-bottom: 10px;
-    font-size: 18px;
-}
-
-.feature-card p {
-    color: #cbd5e1;
-    font-size: 14px;
-    line-height: 1.6;
+    font-size: 32px;
+    font-weight: 800;
+    color: #0f172a;
 }
 
 .stButton > button {
-    background: linear-gradient(135deg, #06b6d4, #7c3aed);
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
     color: white;
-    border-radius: 16px;
     border: none;
-    font-weight: 900;
-    padding: 0.8rem 1.5rem;
-    box-shadow: 0 14px 30px rgba(6,182,212,0.25);
+    border-radius: 12px;
+    padding: 0.7rem 1.3rem;
+    font-weight: 700;
 }
 
 .stButton > button:hover {
-    background: linear-gradient(135deg, #0891b2, #6d28d9);
+    background: linear-gradient(135deg, #1d4ed8, #6d28d9);
     color: white;
 }
 
-[data-testid="stDataFrame"] {
-    border-radius: 18px;
-    overflow: hidden;
+.stDownloadButton > button {
+    background: #0f172a;
+    color: white;
+    border-radius: 12px;
+    border: none;
+    font-weight: 700;
 }
 
 footer {
     visibility: hidden;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
 
-# ======================
+# =========================
 # SIDEBAR
-# ======================
+# =========================
+st.sidebar.markdown("## 🚀 AI Data Platform")
+st.sidebar.markdown("Enterprise AutoML & Analytics")
 
-st.sidebar.markdown("""
-<div class="sidebar-brand">
-    <div class="logo">🧬</div>
-    <h2>Helios AI</h2>
-    <p>Autonomous Space Biolab Intelligence Platform</p>
-</div>
-""", unsafe_allow_html=True)
+menu = st.sidebar.radio(
+    "Navigation",
+    ["Dashboard", "Cleaning", "Modeling", "AI Insights"]
+)
 
-page = st.sidebar.radio(
-    "Mission Navigation",
-    [
-        "Mission Control",
-        "Experiment Upload",
-        "Biolab Monitoring",
-        "AI Scientific Assistant",
-        "Anomaly Detection",
-        "Prediction Engine",
-        "Mission Risk",
-        "Experiment Recommendations",
-        "Knowledge Graph",
-        "Mission Report"
-    ]
+st.sidebar.markdown("### 📂 Upload Dataset")
+
+uploaded_file = st.sidebar.file_uploader(
+    "Upload CSV or Excel",
+    type=["csv", "xlsx", "xls"],
+    label_visibility="collapsed"
 )
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### Developer")
-st.sidebar.markdown("**Leju Monachan**")
-st.sidebar.markdown("[LinkedIn](https://www.linkedin.com/in/leju-monachan757/)")
-st.sidebar.markdown("[GitHub](https://github.com/lejumonachan)")
+st.sidebar.markdown("## 👨‍💻 Developer")
+st.sidebar.markdown("### Leju Monachan")
+st.sidebar.markdown("[🔗 LinkedIn](https://linkedin.com/in/YOUR_LINKEDIN)")
+st.sidebar.markdown("[💻 GitHub](https://github.com/YOUR_GITHUB)")
+st.sidebar.markdown("[🌐 Live Demo](https://your-streamlit-app.streamlit.app)")
 
 
-# ======================
-# TOP BAR + HERO
-# ======================
-
+# =========================
+# HEADER
+# =========================
 st.markdown("""
-<div class="topbar">
-    <div>
-        <div class="topbar-title">Helios AI Mission Interface</div>
-        <div class="topbar-subtitle">Scientific AI • Space Biology • Autonomous Experiment Intelligence</div>
-    </div>
-    <div class="status-pill"> SYSTEM ONLINE</div>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="hero">
-    <div class="hero-badge">SPACE BIOTECH • AUTONOMOUS LABS • SCIENTIFIC AI</div>
-    <div class="hero-title">
-        Intelligence layer for <span class="hero-gradient">space-based biological experimentation</span>
-    </div>
+<div class="hero-card">
+    <div class="hero-title">AI Data Intelligence Platform</div>
     <div class="hero-subtitle">
-        Helios AI is a premium mission-control platform for autonomous biolab monitoring,
-        anomaly detection, biological prediction, scientific RAG intelligence, experiment recommendations,
-        and executive mission reporting in space-like environments.
+        Upload data, clean it, visualize patterns, train models, and generate AI-powered insights.
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 
-# ======================
-# MISSION CONTROL
-# ======================
+# =========================
+# MAIN APP
+# =========================
+if uploaded_file:
 
-if page == "Mission Control":
+    try:
+        df = read_uploaded_dataset(uploaded_file)
 
-    st.markdown('<div class="section-title"> Mission Control Overview</div>', unsafe_allow_html=True)
+    except Exception as e:
+        st.error(f"❌ Error while reading uploaded file: {e}")
+        st.stop()
 
-    c1, c2, c3, c4 = st.columns(4)
+    # =========================
+    # DASHBOARD
+    # =========================
+    if menu == "Dashboard":
 
-    metrics = [
-        ("Experiment State", "Active", "Orbital biolab simulation"),
-        ("Biolab AI", "Online", "Scientific assistant ready"),
-        ("RAG System", "Ready", "Research document intelligence"),
-        ("Risk Engine", "Standby", "Mission stability monitoring")
-    ]
+        st.markdown("## 📊 Executive Dashboard")
 
-    for col, metric in zip([c1, c2, c3, c4], metrics):
-        with col:
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
             st.markdown(f"""
             <div class="metric-card">
-                <div class="metric-label">{metric[0]}</div>
-                <div class="metric-value">{metric[1]}</div>
-                <div class="metric-note">{metric[2]}</div>
+                <div class="metric-label">Total Rows</div>
+                <div class="metric-value">{df.shape[0]}</div>
             </div>
             """, unsafe_allow_html=True)
 
-    st.markdown("""
-    <div class="glass-card">
-        <h3> Mission Objective</h3>
-        <p>
-            Helios AI is designed as an enterprise-style scientific AI prototype for biotechnology,
-            autonomous laboratories, drug discovery, tissue engineering, and space-based experimentation.
-            The platform simulates how AI can monitor biological experiments, detect anomalies,
-            predict outcomes, and generate scientific recommendations remotely.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    f1, f2, f3 = st.columns(3)
-
-    features = [
-        ("", "Biolab Telemetry", "Track mission biological and environmental signals such as radiation, pH, humidity, oxygen, temperature, and growth rate."),
-        ("", "Anomaly Intelligence", "Detect abnormal experiment behavior, biological deviations, unstable conditions, and mission-level operational risks."),
-        ("", "Predictive Biology", "Estimate experiment success probability, growth behavior, and risk levels using machine learning models.")
-    ]
-
-    for col, item in zip([f1, f2, f3], features):
-        with col:
+        with c2:
             st.markdown(f"""
-            <div class="feature-card">
-                <div class="feature-icon">{item[0]}</div>
-                <h4>{item[1]}</h4>
-                <p>{item[2]}</p>
+            <div class="metric-card">
+                <div class="metric-label">Total Columns</div>
+                <div class="metric-value">{df.shape[1]}</div>
             </div>
             """, unsafe_allow_html=True)
 
+        with c3:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">Missing Values</div>
+                <div class="metric-value">{df.isnull().sum().sum()}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-# ======================
-# EXPERIMENT UPLOAD
-# ======================
+        st.markdown("### 📄 Dataset Preview")
+        st.dataframe(df.head(10), use_container_width=True)
 
-elif page == "Experiment Upload":
+        numeric_cols = df.select_dtypes(include="number").columns.tolist()
+        all_cols = df.columns.tolist()
 
-    st.markdown('<div class="section-title"> Experiment Upload</div>', unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="glass-card">
-        Upload experiment telemetry datasets, biological measurements, mission logs,
-        or scientific research documents. Supported formats: CSV, Excel, and PDF.
-    </div>
-    """, unsafe_allow_html=True)
-
-    uploaded_file = st.file_uploader(
-        "Upload Scientific File",
-        type=["csv", "xlsx", "xls", "pdf"]
-    )
-
-    if uploaded_file:
-
-        file_type, data = load_file(uploaded_file)
-
-        if file_type == "dataframe":
-
-            st.success(" Experiment dataset uploaded successfully")
-
-            st.session_state["uploaded_data"] = data
-            st.session_state["file_type"] = "dataframe"
-
-            summary = get_dataframe_summary(data)
-
-            c1, c2, c3, c4 = st.columns(4)
-
-            c1.metric("Rows", summary["rows"])
-            c2.metric("Columns", summary["columns"])
-            c3.metric("Missing Values", summary["missing_values"])
-            c4.metric("Duplicate Rows", summary["duplicate_rows"])
-
-            st.markdown("###  Experiment Dataset Preview")
-            st.dataframe(data.head(25), use_container_width=True)
-
-            c1, c2 = st.columns(2)
-
-            with c1:
-                st.markdown("###  Numeric Columns")
-                st.write(summary["numeric_columns"])
-
-            with c2:
-                st.markdown("###  Categorical Columns")
-                st.write(summary["categorical_columns"])
-
-            st.markdown("###  Statistical Summary")
-            st.dataframe(data.describe(include="all"), use_container_width=True)
-
-        elif file_type == "pdf":
-
-            st.success(" Scientific PDF uploaded successfully")
-
-            st.session_state["uploaded_text"] = data
-            st.session_state["file_type"] = "pdf"
-
-            if data.strip():
-                try:
-                    with st.spinner("Building scientific RAG index..."):
-                        chunks = chunk_text(data)
-                        index, stored_chunks = build_faiss_index(chunks)
-
-                    st.session_state["rag_index"] = index
-                    st.session_state["rag_chunks"] = stored_chunks
-
-                    st.success(" Scientific RAG index created successfully")
-
-                except Exception as e:
-                    st.error(f"RAG Index Error: {e}")
-
-            st.markdown("###  Scientific Document Preview")
-            st.text_area("Extracted PDF Text", data[:6000], height=350)
-
-            st.metric("Extracted Characters", len(data))
-
+        if len(numeric_cols) == 0:
+            st.warning("No numeric columns found for visualization.")
         else:
-            st.error("Unsupported file type")
+            st.markdown("### 📈 Interactive Visual Analytics")
 
+            chart_tabs = st.tabs([
+                "Bar Chart",
+                "Line Chart",
+                "Pie Chart",
+                "Histogram",
+                "Box Plot",
+                "Scatter Plot",
+                "Heatmap"
+            ])
 
-# ======================
-# BIOLAB MONITORING
-# ======================
-
-elif page == "Biolab Monitoring":
-
-    st.markdown('<div class="section-title"> Biolab Monitoring</div>', unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="glass-card">
-        Autonomous mission telemetry monitoring for biological experiments,
-        environmental conditions, and scientific system stability.
-    </div>
-    """, unsafe_allow_html=True)
-
-    if "uploaded_data" not in st.session_state:
-
-        st.warning("Please upload an experiment dataset first from the Experiment Upload page.")
-
-    else:
-
-        df = st.session_state["uploaded_data"]
-
-        numeric_cols, all_cols = get_monitoring_columns(df)
-        health_score = calculate_health_score(df)
-
-        c1, c2, c3, c4 = st.columns(4)
-
-        c1.metric("Mission Rows", df.shape[0])
-        c2.metric("Telemetry Features", df.shape[1])
-        c3.metric("Numeric Signals", len(numeric_cols))
-        c4.metric("Mission Health", f"{health_score}%")
-
-        st.markdown("###  Mission Stability Gauge")
-        st.plotly_chart(create_health_gauge(health_score), use_container_width=True)
-
-        st.markdown("###  Experiment Telemetry Preview")
-        st.dataframe(df.head(25), use_container_width=True)
-
-        st.markdown("###  Scientific Telemetry Analytics")
-
-        tabs = st.tabs([
-            "Time Series",
-            "Scatter Analysis",
-            "Distribution",
-            "Correlation Heatmap"
-        ])
-
-        with tabs[0]:
-            if len(numeric_cols) > 0:
+            with chart_tabs[0]:
                 c1, c2 = st.columns(2)
-                x_col = c1.selectbox("Timeline Column", all_cols, key="time_x")
-                y_col = c2.selectbox("Telemetry Signal", numeric_cols, key="time_y")
-                color_col = st.selectbox("Color Group", [None] + all_cols, key="time_color")
-
-                fig = create_time_series_chart(df, x_col, y_col, color_col)
+                x_bar = c1.selectbox("X-axis", all_cols, key="bar_x")
+                y_bar = c2.selectbox("Y-axis", numeric_cols, key="bar_y")
+                color_bar = st.selectbox("Color Group", [None] + all_cols, key="bar_color")
+                fig = px.bar(df, x=x_bar, y=y_bar, color=color_bar, template="plotly_white")
                 st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No numeric telemetry columns detected.")
 
-        with tabs[1]:
-            if len(numeric_cols) >= 2:
+            with chart_tabs[1]:
                 c1, c2 = st.columns(2)
-                x_col = c1.selectbox("X-axis", numeric_cols, key="scatter_x")
-                y_col = c2.selectbox("Y-axis", numeric_cols, key="scatter_y")
-                color_col = st.selectbox("Color Group", [None] + all_cols, key="scatter_color")
-
-                fig = create_scatter_chart(df, x_col, y_col, color_col)
+                x_line = c1.selectbox("X-axis", all_cols, key="line_x")
+                y_line = c2.selectbox("Y-axis", numeric_cols, key="line_y")
+                color_line = st.selectbox("Color Group", [None] + all_cols, key="line_color")
+                fig = px.line(df, x=x_line, y=y_line, color=color_line, template="plotly_white")
                 st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("Need at least two numeric columns.")
 
-        with tabs[2]:
-            if len(numeric_cols) > 0:
-                selected_col = st.selectbox("Select Telemetry Signal", numeric_cols, key="dist_col")
-                fig = create_distribution_chart(df, selected_col)
+            with chart_tabs[2]:
+                pie_col = st.selectbox("Category Column", all_cols, key="pie_col")
+                pie_data = df[pie_col].value_counts().reset_index()
+                pie_data.columns = [pie_col, "Count"]
+                fig = px.pie(pie_data, names=pie_col, values="Count", template="plotly_white")
                 st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No numeric telemetry signals available.")
 
-        with tabs[3]:
-            if len(numeric_cols) >= 2:
-                st.plotly_chart(create_correlation_heatmap(df), use_container_width=True)
-            else:
-                st.info("Need at least two numeric columns.")
+            with chart_tabs[3]:
+                hist_col = st.selectbox("Histogram Column", numeric_cols, key="hist_col")
+                bins = st.slider("Bins", 10, 100, 30)
+                fig = px.histogram(df, x=hist_col, nbins=bins, template="plotly_white")
+                st.plotly_chart(fig, use_container_width=True)
 
+            with chart_tabs[4]:
+                c1, c2 = st.columns(2)
+                x_box = c1.selectbox("X-axis Optional", [None] + all_cols, key="box_x")
+                y_box = c2.selectbox("Y-axis", numeric_cols, key="box_y")
+                fig = px.box(df, x=x_box, y=y_box, template="plotly_white")
+                st.plotly_chart(fig, use_container_width=True)
 
-# ======================
-# AI SCIENTIFIC ASSISTANT
-# ======================
+            with chart_tabs[5]:
+                c1, c2 = st.columns(2)
+                x_scatter = c1.selectbox("X-axis", numeric_cols, key="scatter_x")
+                y_scatter = c2.selectbox("Y-axis", numeric_cols, key="scatter_y")
+                color_scatter = st.selectbox("Color Group", [None] + all_cols, key="scatter_color")
+                fig = px.scatter(df, x=x_scatter, y=y_scatter, color=color_scatter, template="plotly_white")
+                st.plotly_chart(fig, use_container_width=True)
 
-elif page == "AI Scientific Assistant":
-
-    st.markdown('<div class="section-title"> AI Scientific Assistant</div>', unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="glass-card">
-        Ask scientific questions about uploaded experiment datasets, mission logs,
-        or research PDFs. PDF documents use local RAG-based retrieval for contextual answers.
-    </div>
-    """, unsafe_allow_html=True)
-
-    if "file_type" not in st.session_state:
-        st.warning("Please upload a CSV, Excel, or PDF first from the Experiment Upload page.")
-
-    else:
-
-        file_type = st.session_state["file_type"]
-
-        if file_type == "pdf":
-
-            st.success("Scientific PDF is ready for RAG-based AI analysis.")
-
-            question = st.text_input(
-                "Ask a scientific question",
-                placeholder="Example: What biological risks are mentioned in this document?"
-            )
-
-            if st.button("Ask Scientific AI"):
-
-                if question.strip() == "":
-                    st.warning("Please enter a question.")
-
-                elif "rag_index" not in st.session_state:
-                    st.error("RAG index not found. Please upload the PDF again.")
-
+            with chart_tabs[6]:
+                if len(numeric_cols) > 1:
+                    corr = df[numeric_cols].corr()
+                    fig = px.imshow(corr, text_auto=True, template="plotly_white")
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
-                    with st.spinner("Retrieving scientific context and generating answer..."):
-                        answer = rag_scientific_answer(
-                            question,
-                            st.session_state["rag_index"],
-                            st.session_state["rag_chunks"]
-                        )
+                    st.info("Need at least 2 numeric columns for heatmap.")
 
-                    st.markdown("### Scientific AI Answer")
-                    st.markdown(answer)
+    # =========================
+    # CLEANING
+    # =========================
+    elif menu == "Cleaning":
 
-        elif file_type == "dataframe":
+        st.markdown("## 🧹 Data Cleaning Studio")
 
-            df = st.session_state["uploaded_data"]
+        st.markdown("### Missing Values Before Cleaning")
+        st.dataframe(df.isnull().sum(), use_container_width=True)
 
-            st.success("Experiment dataset is ready for AI analysis.")
-
-            context = f"""
-Dataset Shape: {df.shape}
-
-Columns:
-{list(df.columns)}
-
-Missing Values:
-{df.isnull().sum().to_string()}
-
-Dataset Preview:
-{df.head(25).to_string()}
-
-Statistical Summary:
-{df.describe(include='all').to_string()}
-"""
-
-            question = st.text_input(
-                "Ask a question about the experiment dataset",
-                placeholder="Example: What telemetry signals look important?"
-            )
-
-            if st.button("Analyze Dataset With Scientific AI"):
-
-                if question.strip() == "":
-                    st.warning("Please enter a question.")
-
-                else:
-                    with st.spinner("Scientific AI is analyzing the dataset..."):
-                        answer = scientific_answer(question, context)
-
-                    st.markdown("###  Scientific AI Answer")
-                    st.markdown(answer)
-
-
-# ======================
-# ANOMALY DETECTION
-# ======================
-
-elif page == "Anomaly Detection":
-
-    st.markdown('<div class="section-title"> Anomaly Detection</div>', unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="glass-card">
-        Detect abnormal telemetry behavior, biological instability,
-        environmental deviations, and potential mission risks using Isolation Forest.
-    </div>
-    """, unsafe_allow_html=True)
-
-    if "uploaded_data" not in st.session_state:
-
-        st.warning("Please upload an experiment dataset first from the Experiment Upload page.")
-
-    else:
-
-        df = st.session_state["uploaded_data"]
-
-        contamination = st.slider(
-            "Anomaly Sensitivity",
-            min_value=0.01,
-            max_value=0.20,
-            value=0.05,
-            step=0.01
+        strategy = st.selectbox(
+            "Numeric Missing Value Strategy",
+            ["mean", "median"]
         )
 
-        if st.button("Run Anomaly Detection"):
+        if st.button("Auto Clean Data"):
+            df = clean_data(df)
+            df = handle_missing(df, strategy=strategy)
 
-            with st.spinner("Analyzing experiment telemetry for anomalies..."):
-                anomaly_df, message = detect_anomalies(df, contamination=contamination)
-                alerts = rule_based_alerts(df)
+            st.success("✅ Data cleaned successfully")
 
-            st.session_state["anomaly_df"] = anomaly_df
+            st.markdown("### Missing Values After Cleaning")
+            st.dataframe(df.isnull().sum(), use_container_width=True)
 
-            st.success(message)
+        st.markdown("### Cleaned Data Preview")
+        st.dataframe(df.head(10), use_container_width=True)
 
-            normal_count = int((anomaly_df["anomaly_status"] == "Normal").sum())
-            anomaly_count = int((anomaly_df["anomaly_status"] == "Anomaly").sum())
+        csv = df.to_csv(index=False).encode("utf-8")
 
-            c1, c2, c3 = st.columns(3)
+        st.download_button(
+            "Download Cleaned Dataset",
+            csv,
+            "cleaned_data.csv",
+            "text/csv"
+        )
 
-            c1.metric("Normal Records", normal_count)
-            c2.metric("Anomalies", anomaly_count)
-            c3.metric("Sensitivity", contamination)
+    # =========================
+    # MODELING
+    # =========================
+    elif menu == "Modeling":
 
-            st.markdown("###  Mission Alerts")
+        st.markdown("## 🤖 AutoML Modeling Engine")
 
-            for alert in alerts:
-                if "" in alert:
-                    st.warning(alert)
-                else:
-                    st.success(alert)
+        target = st.selectbox("Target Column", df.columns)
 
-            st.markdown("### Anomaly Detection Results")
-            st.dataframe(anomaly_df.head(100), use_container_width=True)
+        numeric_strategy = st.selectbox(
+            "Numeric Missing Value Strategy",
+            ["mean", "median"]
+        )
 
-            if anomaly_count > 0:
-                st.markdown("###  Detected Anomaly Records")
-                st.dataframe(
-                    anomaly_df[anomaly_df["anomaly_status"] == "Anomaly"],
-                    use_container_width=True
-                )
+        feature_k = st.selectbox(
+            "Feature Selection",
+            ["all", 5, 10, 15]
+        )
 
-            csv = anomaly_df.to_csv(index=False).encode("utf-8")
+        if "ml_output" not in st.session_state:
+            st.session_state.ml_output = None
 
-            st.download_button(
-                "Download Anomaly Report CSV",
-                csv,
-                "helios_anomaly_report.csv",
-                "text/csv"
-            )
-
-
-# ======================
-# PREDICTION ENGINE
-# ======================
-
-elif page == "Prediction Engine":
-
-    st.markdown('<div class="section-title"> Prediction Engine</div>', unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="glass-card">
-        Train a machine learning model to predict experiment outcomes,
-        biological response, mission stability, or success conditions.
-    </div>
-    """, unsafe_allow_html=True)
-
-    if "uploaded_data" not in st.session_state:
-
-        st.warning("Please upload an experiment dataset first.")
-
-    else:
-
-        df = st.session_state["uploaded_data"]
-
-        target = st.selectbox("Select Prediction Target", df.columns)
-
-        if st.button("Train Prediction Model"):
+        if st.button("Run Models"):
 
             try:
-                with st.spinner("Training biological prediction model..."):
-                    output = train_prediction_model(df, target)
+                output = run_ml_pipeline(
+                    df=df,
+                    target_column=target,
+                    numeric_strategy=numeric_strategy,
+                    feature_k=feature_k
+                )
 
-                st.session_state["prediction_output"] = output
-
-                st.success(" Prediction model trained successfully")
-
-                st.markdown("### Problem Type")
-                st.info(output["problem_type"])
-
-                st.markdown("### Model Metrics")
-                st.json(output["metrics"])
-
-                pred_df = pd.DataFrame({
-                    "Actual": output["actual"],
-                    "Predicted": output["predictions"]
-                })
-
-                st.markdown("### Sample Predictions")
-                st.dataframe(pred_df, use_container_width=True)
+                st.session_state.ml_output = output
+                st.success("✅ ML Pipeline completed successfully")
 
             except Exception as e:
-                st.error(f"Prediction Error: {e}")
+                st.error(f"❌ Modeling Error: {e}")
 
-        if "prediction_output" in st.session_state:
+        if st.session_state.ml_output is not None:
 
-            output = st.session_state["prediction_output"]
+            output = st.session_state.ml_output
 
-            st.markdown("##  Live Experiment Prediction")
+            st.markdown("### Detected Problem Type")
+            st.info(output["problem_type"])
+
+            st.markdown("### Model Comparison")
+            st.dataframe(output["results"], use_container_width=True)
+
+            st.markdown("### 🏆 Best Model")
+            st.success(output["best_model_name"])
+
+            st.markdown("### 🔮 Sample Predictions")
+
+            prediction_df = pd.DataFrame({
+                "Actual": output["actual"],
+                "Predicted": output["predictions"]
+            })
+
+            st.dataframe(prediction_df, use_container_width=True)
+
+            st.divider()
+
+            st.markdown("## 🚀 Live Prediction Console")
 
             user_input = {}
             X_sample = output["X_sample"]
@@ -864,9 +420,16 @@ elif page == "Prediction Engine":
             for col in feature_columns:
 
                 if pd.api.types.is_numeric_dtype(X_sample[col]):
+
+                    min_val = float(X_sample[col].min())
+                    max_val = float(X_sample[col].max())
+                    mean_val = float(X_sample[col].mean())
+
                     user_input[col] = st.number_input(
                         col,
-                        value=float(X_sample[col].mean())
+                        min_value=min_val,
+                        max_value=max_val,
+                        value=mean_val
                     )
 
                 else:
@@ -877,235 +440,64 @@ elif page == "Prediction Engine":
 
                     user_input[col] = st.selectbox(col, options)
 
-            if st.button("Predict Experiment Outcome"):
+            if st.button("Predict Target Value"):
 
                 try:
-                    prediction = predict_single_input(
-                        output["model"],
-                        user_input,
-                        feature_columns,
-                        output["target_encoder"]
+                    prediction = predict_user_input(
+                        model=output["best_model"],
+                        input_data=user_input,
+                        feature_columns=feature_columns,
+                        target_encoder=output["target_encoder"]
                     )
 
-                    st.success(f" Predicted {target}: {prediction}")
+                    st.success(f"✅ Predicted {target}: {prediction}")
 
                 except Exception as e:
-                    st.error(f"Live Prediction Error: {e}")
+                    st.error(f"❌ Prediction Error: {e}")
 
+    # =========================
+    # AI INSIGHTS
+    # =========================
+    elif menu == "AI Insights":
 
-# ======================
-# MISSION RISK
-# ======================
+        st.markdown("## 🧠 AI Analyst")
 
-elif page == "Mission Risk":
+        st.write("Generate executive-level AI insights from your dataset.")
 
-    st.markdown('<div class="section-title"> Mission Risk Assessment</div>', unsafe_allow_html=True)
+        if st.button("Generate Insights"):
 
-    st.markdown("""
-    <div class="glass-card">
-        Evaluate biological mission stability using telemetry quality,
-        environmental consistency, anomaly indicators, and experiment signal behavior.
-    </div>
-    """, unsafe_allow_html=True)
+            summary = f"""
+Dataset shape: {df.shape}
 
-    if "uploaded_data" not in st.session_state:
+Columns:
+{list(df.columns)}
 
-        st.warning("Please upload an experiment dataset first.")
-
-    else:
-
-        df = st.session_state["uploaded_data"]
-
-        if st.button("Run Mission Risk Assessment"):
-
-            with st.spinner("Analyzing mission telemetry risk..."):
-                risk_result = calculate_mission_risk(df)
-
-            risk_score = risk_result["risk_score"]
-            risk_level = risk_result["risk_level"]
-            reasons = risk_result["reasons"]
-
-            c1, c2, c3 = st.columns(3)
-
-            c1.metric("Mission Risk Score", risk_score)
-            c2.metric("Risk Level", risk_level)
-
-            if risk_level == "LOW":
-                status = "Stable"
-                color = "#10b981"
-            elif risk_level == "MODERATE":
-                status = "Monitor Closely"
-                color = "#f59e0b"
-            else:
-                status = "Critical"
-                color = "#ef4444"
-
-            c3.metric("Mission Status", status)
-
-            st.markdown(f"""
-            <div style="
-                background: rgba(15,23,42,0.72);
-                border: 1px solid {color};
-                border-radius: 24px;
-                padding: 30px;
-                margin-top: 20px;
-                margin-bottom: 25px;
-                box-shadow: 0 18px 45px rgba(0,0,0,0.35);
-            ">
-                <h2 style="color:{color}; margin-bottom:10px;">
-                    Mission Risk Level: {risk_level}
-                </h2>
-                <p style="color:#cbd5e1; font-size:16px;">
-                    Mission telemetry and biological experiment conditions were analyzed
-                    to estimate operational stability and scientific mission risk.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown("### Risk Analysis Factors")
-
-            for reason in reasons:
-                if "stable" in reason.lower():
-                    st.success(reason)
-                else:
-                    st.warning(reason)
-
-
-# ======================
-# EXPERIMENT RECOMMENDATIONS
-# ======================
-
-elif page == "Experiment Recommendations":
-
-    st.markdown('<div class="section-title"> Experiment Recommendations</div>', unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="glass-card">
-        Generate scientific recommendations for experiment conditions based on uploaded telemetry,
-        biological measurements, and mission data behavior.
-    </div>
-    """, unsafe_allow_html=True)
-
-    if "uploaded_data" not in st.session_state:
-
-        st.warning("Please upload an experiment dataset first.")
-
-    else:
-
-        df = st.session_state["uploaded_data"]
-
-        if st.button("Generate Experiment Recommendations"):
-
-            with st.spinner("Analyzing experiment parameters..."):
-                recommendations = generate_experiment_recommendations(df)
-
-            st.markdown("###  AI Experiment Recommendations")
-
-            for rec in recommendations:
-                st.info(rec)
-
-
-# ======================
-# KNOWLEDGE GRAPH
-# ======================
-
-elif page == "Knowledge Graph":
-
-    st.markdown('<div class="section-title"> Scientific Knowledge Graph</div>', unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="glass-card">
-        Extract scientific entities and relationships from uploaded research PDFs or mission documents.
-    </div>
-    """, unsafe_allow_html=True)
-
-    if "uploaded_text" not in st.session_state:
-
-        st.warning("Please upload a scientific PDF first.")
-
-    else:
-
-        text = st.session_state["uploaded_text"]
-
-        if st.button("Build Scientific Knowledge Graph"):
-
-            graph, entities = build_knowledge_graph(text)
-            edges = get_graph_edges(graph)
-
-            st.success("Knowledge graph generated successfully")
-
-            st.markdown("### Extracted Scientific Entities")
-            st.write(entities)
-
-            st.markdown("### Scientific Relationships")
-
-            if len(edges) > 0:
-                edge_df = pd.DataFrame(edges, columns=["Entity 1", "Entity 2"])
-                st.dataframe(edge_df, use_container_width=True)
-            else:
-                st.info("No relationships detected.")
-
-
-# ======================
-# MISSION REPORT
-# ======================
-
-elif page == "Mission Report":
-
-    st.markdown('<div class="section-title"> Mission Report</div>', unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="glass-card">
-        Generate a downloadable scientific mission report including observations,
-        risks, recommendations, and AI-generated summaries.
-    </div>
-    """, unsafe_allow_html=True)
-
-    if "uploaded_data" not in st.session_state and "uploaded_text" not in st.session_state:
-
-        st.warning("Please upload experiment data or scientific PDF first.")
-
-    else:
-
-        if "uploaded_data" in st.session_state:
-
-            df = st.session_state["uploaded_data"]
-
-            context = f"""
-Dataset Shape: {df.shape}
-Columns: {list(df.columns)}
-
-Missing Values:
+Missing values:
 {df.isnull().sum().to_string()}
 
-Preview:
-{df.head(25).to_string()}
+Data preview:
+{df.head(20).to_string()}
 
-Statistical Summary:
+Statistical summary:
 {df.describe(include='all').to_string()}
 """
 
-        else:
+            try:
+                result = ask_llm(summary)
+                st.markdown(result)
 
-            context = st.session_state["uploaded_text"][:8000]
+            except Exception as e:
+                st.error(f"LLM Error: {e}")
 
-        if st.button("Generate Mission Report"):
+else:
 
-            with st.spinner("Generating scientific mission report..."):
-                summary = generate_scientific_summary(context)
+    st.markdown("""
+    <div class="hero-card">
+        <div class="hero-title">Welcome to AI Data Platform</div>
+        <div class="hero-subtitle">
+            Upload a CSV or Excel file from the sidebar to begin your analysis.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-            st.markdown("###  Scientific Mission Summary")
-            st.markdown(summary)
-
-            report_path = generate_mission_report(
-                title="Helios AI Scientific Mission Report",
-                content=summary
-            )
-
-            with open(report_path, "rb") as file:
-                st.download_button(
-                    label=" Download Mission Report",
-                    data=file,
-                    file_name="helios_mission_report.pdf",
-                    mime="application/pdf"
-                )
+    st.info("Upload a CSV or Excel file to start.")
